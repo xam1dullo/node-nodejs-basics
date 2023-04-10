@@ -4,9 +4,8 @@ import { createServer as createServerHttp } from "node:http";
 import path from "node:path";
 import "./files/c.js";
 
-
-const __dirname = path.dirname(process.argv[1])
-const __filename = path.basename(process.argv[1])
+const __dirname = path.dirname(process.argv[1]);
+const __filename = path.basename(process.argv[1]);
 
 const random = Math.random();
 

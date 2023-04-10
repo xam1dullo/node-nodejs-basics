@@ -12,8 +12,10 @@ const compress = async (srcFolder, srcFile, dstnFolder, dstnFile) => {
   // Write your code here
   const srcPath = path.join(__dirname, srcFolder, srcFile);
   const dstnPath = path.join(__dirname, dstnFolder, dstnFile);
+
   const zip = createGzip();
   const output = fs.createWriteStream(dstnPath);
+
   await fs.createReadStream(srcPath).pipe(zip).pipe(output);
 };
 

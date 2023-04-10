@@ -11,6 +11,7 @@ const write = async (folder, file) => {
     // Write your code here
     const filePath = path.join(__dirname, folder, file);
     const outputStream = fs.createWriteStream(filePath);
+
     process.stdin.pipe(outputStream);
   } catch (e) {
     console.log(e);
