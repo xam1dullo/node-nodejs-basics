@@ -15,6 +15,7 @@ const performCalculations = async () => {
     worker.postMessage(i + 10);
     worker.on("message", (message) => {
       results.push({ status: "resolved", data: message });
+
       if (results.length === numCPUs) {
         console.log(results);
       }
@@ -22,6 +23,7 @@ const performCalculations = async () => {
 
     worker.on("error", () => {
       results.push({ status: "error", data: null });
+
       if (results.length === numCPUs) {
         console.log(results);
       }
