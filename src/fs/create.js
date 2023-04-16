@@ -25,8 +25,7 @@ const create = async (filePath) => {
         fileHandle.close();
         return "A new file was successfully created";
     }
-
-    throw new Error("FS operation failed");
+    new Error("FS operation failed");
 };
 
 export default create;

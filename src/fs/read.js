@@ -24,8 +24,7 @@ const read = async (filePath) => {
             console.log(line);
         }
     } catch (e) {
-        console.log(e);
-        // throw new Error(error);
+        new Error(error);
     }
 };
 
