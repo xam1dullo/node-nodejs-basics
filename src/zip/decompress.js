@@ -8,15 +8,12 @@ const archiveFileName = "archive.gz";
 const folder = "files";
 const file = "fileToCompress.txt";
 
-const decompress = async (srcFolder, srcFile, dstnFolder, dstnFile) => {
-  const srcPath = path.join(__dirname, srcFolder, srcFile);
-  const dstnPath = path.join(__dirname, dstnFolder, dstnFile);
+const decompress = async (sourcePath, destinationPath) => {
+    const input = fs.createReadStream(sourcePath);
+    const unzip = createGunzip();
+    const output = fs.createWriteStream(destinationPath);
 
-  const input = fs.createReadStream(srcPath);
-  const unzip = createGunzip();
-  const output = fs.createWriteStream(dstnPath);
-
-  input.pipe(unzip).pipe(output);
+    input.pipe(unzip).pipe(output);
 };
 
-await decompress(folder, archiveFileName, folder, file);
+export default decompress;

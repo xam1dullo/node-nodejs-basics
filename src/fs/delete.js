@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const __dirname = path.dirname(process.argv[1])
-const __filename = path.basename(process.argv[1])
+const __dirname = path.dirname(process.argv[1]);
+const __filename = path.basename(process.argv[1]);
 
 const folder = "files";
 const file = "fileToRemove.txt";
@@ -10,18 +10,16 @@ const error = "FS operation failed";
 
 const isExist = async (path) => {
     try {
-        await fs.access(path)
-        return true
+        await fs.access(path);
+        return true;
     } catch (e) {
-        return false
+        return false;
     }
-}
+};
 
-
-const remove = async (fileName) => {
+const remove = async (filePath) => {
     // Write your code here
     try {
-        const filePath = path.join(__dirname, folder, fileName);
         const isExistFile = await isExist(filePath);
         if (!isExistFile) {
             throw new Error(error);
@@ -32,4 +30,4 @@ const remove = async (fileName) => {
     }
 };
 
-await remove(file);
+export default remove;
