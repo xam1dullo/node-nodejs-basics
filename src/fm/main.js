@@ -1,17 +1,20 @@
 import fs from "node:fs/promises";
-import { createReadStream, createWriteStream } from "node:fs";
+import {
+    copyFileSync,
+    createReadStream,
+    createWriteStream,
+    mkdir,
+} from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import zlib from "zlib";
 
 import { createInterface } from "node:readline";
 
 import read from "../fs/read.js";
 import rename from "../fs/rename.js";
 import create from "../fs/create.js";
-import remove from "../fs/delete.js";
-import copy from "../fs/copy.js";
-import compress from "../zip/compress.js";
-import decompress from "../zip/decompress.js";
+
 import calculateHash from "../hash/calcHash.js";
 import {
     __dirname,
@@ -42,7 +45,7 @@ const rl = createInterface({
 function colorTrace(msg, color) {
     console.log("%c" + msg, "color:" + color + ";font-weight:bold;");
 }
-let currentDir = path.join(__dirname, "../");
+let currentDir = os.homedir();
 
 const clearAndDisplayCurrentDir = () => {
     process.stdout.write("\x1Bc");
@@ -57,7 +60,7 @@ const commandFunc = {
     up: () => {
         try {
             //clear screen and display current directory with green text
-            currentDir = path.join(__dirname, "../");
+            currentDir = path.join(currentDir, "../");
         } catch (error) {
             console.log(messages.errorMessage);
         }
@@ -70,13 +73,20 @@ const commandFunc = {
                 return;
             }
 
-            const newPath = path.join(currentDir, args[0]);
-            const fileExist = await isExist(newPath);
-            if (!path.isAbsolute(newPath) || !fileExist) {
+            const newPath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+
+            const folderExist = await isExist(newPath);
+
+            if (!(await fs.lstat(newPath)).isDirectory()) {
                 console.log(messages.errorMessage);
                 return;
             }
-            currentDir = newPath;
+
+            if (!(path.parse(newPath).root === args[0]) && folderExist) {
+                currentDir = newPath;
+            }
         } catch (error) {
             console.log(messages.errorMessage);
         }
@@ -113,21 +123,22 @@ const commandFunc = {
             console.log(messages.errorMessage);
         }
     },
-    cat: async (file) => {
+    cat: async (args) => {
         // display file contents
         try {
-            if (file.length !== 1) {
+            if (args.length !== 1) {
                 console.log(messages.errorMessage);
                 return;
             }
-            const filePath = path.join(currentDir, file[0]);
-            const fileExist = await isExist(filePath);
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+            const fileExist = await isExist(sourcePath);
             if (!fileExist) {
                 console.log(messages.errorMessage);
                 return;
             }
-
-            read(filePath);
+            read(sourcePath);
         } catch (error) {
             console.log(messages.errorMessage);
         }
@@ -159,15 +170,29 @@ const commandFunc = {
                 return;
             }
 
-            const sourcePath = path.join(currentDir, args[0]);
-            const destinationPath = path.join(currentDir, args[1]);
-            const sourceExist = await isExist(sourcePath);
-            const destinationExist = await isExist(destinationPath);
-            if (!sourceExist || destinationExist) {
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+            const destinationPath = path.isAbsolute(args[1])
+                ? args[1]
+                : path.join(currentDir, args[1]);
+
+            const destinationDir = path.dirname(destinationPath);
+            if (
+                (await isExist(destinationDir)) &&
+                destinationDir !== currentDir
+            ) {
                 console.log(messages.errorMessage);
                 return;
             }
 
+            const sourceExist = await isExist(sourcePath);
+            const destinationExist = await isExist(destinationPath);
+
+            if (sourceExist && destinationExist) {
+                console.log(messages.errorMessage);
+                return;
+            }
             rename(sourcePath, destinationPath);
         } catch (error) {
             console.log(messages.errorMessage);
@@ -181,16 +206,38 @@ const commandFunc = {
                 return;
             }
 
-            const sourcePath = path.join(currentDir, args[0]);
-            const destinationPath = path.join(currentDir, args[1]);
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+            const destinationPath = path.isAbsolute(args[1])
+                ? args[1]
+                : path.join(currentDir, args[1]);
+
+            const destinationDir = path.dirname(destinationPath);
+
             const sourceExist = await isExist(sourcePath);
             const destinationExist = await isExist(destinationPath);
-            if (!sourceExist || destinationExist) {
+
+            if (!sourceExist) {
+                console.log({
+                    sourceExist,
+                    destinationExist,
+                    msg: "error",
+                });
                 console.log(messages.errorMessage);
                 return;
             }
+            if (destinationExist) {
+                await fs.mkdir(destinationDir, { recursive: true });
+            }
+            const readStream = createReadStream(sourcePath);
+            const writeStream = createWriteStream(destinationPath);
 
-            copy(sourcePath, destinationPath);
+            readStream.pipe(writeStream);
+
+            readStream.on("finish", () => {
+                console.log("File copied successfully");
+            });
         } catch (error) {
             console.log(messages.errorMessage);
         }
@@ -202,29 +249,37 @@ const commandFunc = {
                 console.log(messages.errorMessage);
                 return;
             }
-            const sourcePath = path.join(currentDir, args[0]);
-            const destinationPath = path.join(currentDir, args[1]);
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+            const destinationPath = path.isAbsolute(args[1])
+                ? args[1]
+                : path.join(currentDir, args[1]);
 
-            if (!sourceExist || destinationExist) {
+            const sourceExist = await isExist(sourcePath);
+            const destinationExist = await isExist(destinationPath);
+
+            if (!sourceExist) {
                 console.log(messages.errorMessage);
                 return;
             }
-            const readStream = createReadStream(sourcePath);
-            const writeStream = createWriteStream(destinationPath);
-
-            readStream.pipe(writeStream);
-            writeStream.on("finish", () => {
-                fs.unlink(sourcePath, (err) => {
-                    if (err) {
-                        console.error(`Error deleting file: ${err}`);
-                    } else {
-                        console.log(
-                            `File moved successfully from ${sourcePath} to ${destinationPath}`
-                        );
-                    }
+            if (!destinationExist) {
+                console.log({
+                    sourceExist,
+                    destinationExist,
+                    msg: "error",
                 });
-            });
+                await fs.mkdir(destinationPath, { recursive: true });
+            }
+            const source = await createReadStream(sourcePath);
+            const destination = await createWriteStream(destinationPath);
+            await source.pipe(destination);
+            await fs.unlink(sourcePath);
         } catch (error) {
+            console.log({
+                msg: error.message,
+                error,
+            });
             console.log(messages.errorMessage);
         }
     },
@@ -235,14 +290,33 @@ const commandFunc = {
                 console.log(messages.errorMessage);
                 return;
             }
-            const filePath = path.join(currentDir, args[0]);
-            const sourceExist = await isExist(filePath);
+
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+
+            const sourceExist = await isExist(sourcePath);
+
             if (!sourceExist) {
+                console.log({
+                    msg: "error",
+                    sourceExist,
+                    sourcePath,
+                });
                 console.log(messages.errorMessage);
                 return;
             }
-            remove(filePath);
+            const dir = await fs.stat(sourcePath);
+            if (dir.isDirectory()) {
+                await fs.rmdir(sourcePath);
+            } else {
+                await fs.unlink(sourcePath);
+            }
         } catch (err) {
+            console.log({
+                msg: err.message,
+                err,
+            });
             console.error(messages.errorMessage);
         }
     },
@@ -255,7 +329,9 @@ const commandFunc = {
             }
             const param = args[0].split("--")[1];
             if (param == "EOL") {
-                console.log(`The End of Line character is: ${os.EOL}`);
+                console.log(
+                    `The End of Line character is: ${JSON.stringify(os.EOL)}`
+                );
             } else if (param == "cpus") {
                 const cpus = os.cpus();
                 console.log(`Number of CPUs: ${cpus.length}`);
@@ -288,15 +364,24 @@ const commandFunc = {
                 console.log(messages.errorMessage);
                 return;
             }
-            const filePath = path.join(currentDir, args[0]);
+            const filePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+
             const sourceExist = await isExist(filePath);
+
             if (!sourceExist) {
+                console.log({
+                    msg: "error",
+                    sourceExist,
+                    filePath,
+                });
+
                 console.log(messages.errorMessage);
                 return;
             }
 
             calculateHash(filePath);
-            return hash;
         } catch (error) {
             console.log(messages.errorMessage);
         }
@@ -309,17 +394,37 @@ const commandFunc = {
                 console.log(messages.errorMessage);
                 return;
             }
-            const sourcePath = path.join(currentDir, args[0]);
-            const destinationPath = path.join(currentDir, args[1]);
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+            const destinationPath = path.isAbsolute(args[1])
+                ? args[1]
+                : path.join(currentDir, args[1]);
+
             const sourceExist = await isExist(sourcePath);
             const destinationExist = await isExist(destinationPath);
+
             if (!sourceExist || destinationExist) {
                 console.log(messages.errorMessage);
                 return;
             }
-
-            compress(sourcePath, destinationPath);
+            const sourceStream = createReadStream(sourcePath);
+            const destinationStream = createWriteStream(destinationPath);
+            sourceStream
+                .pipe(zlib.createBrotliCompress())
+                .pipe(destinationStream)
+                .on("finish", () => {
+                    console.log(
+                        `File compressed successfully to ${destinationPath}`
+                    );
+                })
+                .on("error", (error) => {
+                    console.log(
+                        `Error occurred while compressing file: ${error}`
+                    );
+                });
         } catch (error) {
+            console.log(error);
             console.log(messages.errorMessage);
         }
     },
@@ -331,14 +436,41 @@ const commandFunc = {
                 console.log(messages.errorMessage);
                 return;
             }
-            const sourcePath = path.join(currentDir, args[0]);
-            const destinationPath = path.join(currentDir, args[1]);
+            const sourcePath = path.isAbsolute(args[0])
+                ? args[0]
+                : path.join(currentDir, args[0]);
+            const destinationPath = path.isAbsolute(args[1])
+                ? args[1]
+                : path.join(currentDir, args[1]);
+
+            const sourceExist = await isExist(sourcePath);
+            const destinationExist = await isExist(destinationPath);
+
             if (!sourceExist || destinationExist) {
+                console.log({
+                    msg: "error",
+                    sourceExist,
+                    destinationExist,
+                    sourcePath,
+                    destinationPath,
+                });
                 console.log(messages.errorMessage);
                 return;
             }
-            decompress(sourcePath, destinationPath);
+            const brStream = createReadStream(sourcePath);
+            const unzipStream = zlib.createBrotliDecompress();
+            const writeStream = createWriteStream(destinationPath);
+            brStream.pipe(unzipStream).pipe(writeStream);
+
+            await new Promise((resolve, reject) => {
+                writeStream.on("finish", resolve);
+                writeStream.on("error", reject);
+            });
+            console.log("File decompressed successfully!");
         } catch (error) {
+            console.log({
+                msg: error,
+            });
             console.log(messages.errorMessage);
         }
     },

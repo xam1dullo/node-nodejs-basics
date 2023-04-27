@@ -88,13 +88,18 @@ const colours = {
 
 // Path: src/fm/helper.js
 
-const isExist = async (path) => {
-    try {
-        await fs.access(path);
-        return true;
-    } catch (e) {
-        return false;
-    }
+const isExist = async (target) => {
+    const source = path.isAbsolute(target)
+        ? target
+        : path.join(this.current_dir, target);
+    return fs
+        .access(source, fs.constants.R_OK)
+        .then(() => {
+            return true;
+        })
+        .catch(() => {
+            return false;
+        });
 };
 
 export { __dirname, commands, messages, paths, colours, isExist };
